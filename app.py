@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from anyio import to_thread
 from any_guardrail import AnyGuardrail, GuardrailName, GuardrailOutput, HuggingFaceProvider
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -62,7 +63,13 @@ class GuardrailProfileConfig(BaseModel):
 class ServiceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    class ThreadpoolConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        max_workers: int | None = Field(default=None, ge=1)
+
     profiles: dict[str, GuardrailProfileConfig] = Field(default_factory=dict)
+    threadpool: ThreadpoolConfig = Field(default_factory=ThreadpoolConfig)
 
 
 class GuardrailProfileSummary(BaseModel):
@@ -100,6 +107,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
     merged_profiles: dict[str, GuardrailProfileConfig] = {}
+    merged_threadpool = ServiceConfig.ThreadpoolConfig()
 
     for path in paths or get_config_paths():
         config = ServiceConfig.model_validate(load_yaml(path))
@@ -109,13 +117,22 @@ def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
             msg = f"Duplicate profile names found across configuration files: {duplicates}"
             raise ValueError(msg)
         merged_profiles.update(config.profiles)
+        if "max_workers" in config.threadpool.model_fields_set:
+            merged_threadpool.max_workers = config.threadpool.max_workers
 
-    return ServiceConfig(profiles=merged_profiles)
+    return ServiceConfig(profiles=merged_profiles, threadpool=merged_threadpool)
 
 
-async def get_service_config() -> ServiceConfig:
+def apply_threadpool_settings(config: ServiceConfig) -> None:
+    if config.threadpool.max_workers is None:
+        return
+    limiter = to_thread.current_default_thread_limiter()
+    limiter.total_tokens = config.threadpool.max_workers
+
+
+def get_service_config() -> ServiceConfig:
     try:
-        return await run_in_threadpool(load_service_config)
+        return load_service_config()
     except (FileNotFoundError, ValidationError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -127,6 +144,11 @@ def serialize_result(result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutp
 
 
 app = FastAPI(title="Any Guardrail Service", version="0.1.0")
+
+
+@app.on_event("startup")
+async def configure_threadpool() -> None:
+    apply_threadpool_settings(load_service_config())
 
 
 @app.get("/healthz")

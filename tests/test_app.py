@@ -20,8 +20,8 @@ class FakeGuardrail:
 
 
 class AppTestCase(TestCase):
-    def test_app_handlers_are_async(self) -> None:
-        self.assertTrue(inspect.iscoroutinefunction(app.get_service_config))
+    def test_app_handlers_are_async_except_sync_service_config(self) -> None:
+        self.assertFalse(inspect.iscoroutinefunction(app.get_service_config))
         self.assertTrue(inspect.iscoroutinefunction(app.healthcheck))
         self.assertTrue(inspect.iscoroutinefunction(app.list_profiles))
         self.assertTrue(inspect.iscoroutinefunction(app.validate))
@@ -42,7 +42,9 @@ class AppTestCase(TestCase):
                 "  llm-policy:\n"
                 "    guardrail_name: any_llm\n"
                 "    validate_kwargs:\n"
-                "      policy: no unsafe content\n",
+                "      policy: no unsafe content\n"
+                "threadpool:\n"
+                "  max_workers: 8\n",
                 encoding="utf-8",
             )
 
@@ -50,6 +52,19 @@ class AppTestCase(TestCase):
 
         self.assertEqual(sorted(config.profiles), ["llm-policy", "prompt-safety"])
         self.assertEqual(config.profiles["prompt-safety"].guardrail_name.value, "harm_guard")
+        self.assertEqual(config.threadpool.max_workers, 8)
+
+    def test_apply_threadpool_settings_sets_default_thread_limiter(self) -> None:
+        class FakeLimiter:
+            total_tokens = 40
+
+        limiter = FakeLimiter()
+        config = app.ServiceConfig.model_validate({"profiles": {}, "threadpool": {"max_workers": 12}})
+
+        with patch("app.to_thread.current_default_thread_limiter", return_value=limiter):
+            app.apply_threadpool_settings(config)
+
+        self.assertEqual(limiter.total_tokens, 12)
 
     def test_validate_endpoint_uses_profile_configuration_and_request_overrides(self) -> None:
         fake_guardrail = FakeGuardrail()
