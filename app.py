@@ -8,6 +8,7 @@ import yaml
 from any_guardrail import AnyGuardrail, GuardrailName, GuardrailOutput, HuggingFaceProvider
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "service.yaml"
 
@@ -112,9 +113,9 @@ def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
     return ServiceConfig(profiles=merged_profiles)
 
 
-def get_service_config() -> ServiceConfig:
+async def get_service_config() -> ServiceConfig:
     try:
-        return load_service_config()
+        return await run_in_threadpool(load_service_config)
     except (FileNotFoundError, ValidationError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -129,12 +130,12 @@ app = FastAPI(title="Any Guardrail Service", version="0.1.0")
 
 
 @app.get("/healthz")
-def healthcheck() -> dict[str, str]:
+async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/profiles", response_model=list[GuardrailProfileSummary])
-def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[GuardrailProfileSummary]:
+async def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[GuardrailProfileSummary]:
     return [
         GuardrailProfileSummary(
             name=name,
@@ -146,19 +147,19 @@ def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[G
 
 
 @app.post("/validate", response_model=ValidateResponse)
-def validate(request: ValidateRequest, config: ServiceConfig = Depends(get_service_config)) -> ValidateResponse:
+async def validate(request: ValidateRequest, config: ServiceConfig = Depends(get_service_config)) -> ValidateResponse:
     profile = config.profiles.get(request.profile)
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Unknown profile: {request.profile}")
 
-    guardrail = profile.build_guardrail()
+    guardrail = await run_in_threadpool(profile.build_guardrail)
     validate_kwargs = {**profile.validate_kwargs, **request.validate_kwargs}
 
     try:
         if request.input_text is None:
-            result = guardrail.validate(**validate_kwargs)
+            result = await run_in_threadpool(guardrail.validate, **validate_kwargs)
         else:
-            result = guardrail.validate(request.input_text, **validate_kwargs)
+            result = await run_in_threadpool(guardrail.validate, request.input_text, **validate_kwargs)
     except TypeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -19,6 +20,12 @@ class FakeGuardrail:
 
 
 class AppTestCase(TestCase):
+    def test_app_handlers_are_async(self) -> None:
+        self.assertTrue(inspect.iscoroutinefunction(app.get_service_config))
+        self.assertTrue(inspect.iscoroutinefunction(app.healthcheck))
+        self.assertTrue(inspect.iscoroutinefunction(app.list_profiles))
+        self.assertTrue(inspect.iscoroutinefunction(app.validate))
+
     def test_load_service_config_merges_multiple_yaml_files(self) -> None:
         with TemporaryDirectory() as temp_dir:
             first_path = Path(temp_dir) / "first.yaml"
