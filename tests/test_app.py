@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import patch
 
-from any_guardrail import GuardrailOutput
+from any_guardrail import GuardrailName, GuardrailOutput
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
@@ -109,7 +109,6 @@ class AppTestCase(TestCase):
             ],
         )
 
-
 class AppAsyncE2ETestCase(IsolatedAsyncioTestCase):
     async def test_healthcheck_endpoint_returns_ok(self) -> None:
         async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
@@ -156,4 +155,23 @@ class AppAsyncE2ETestCase(IsolatedAsyncioTestCase):
                 "profile": "llm-policy",
                 "result": {"valid": True, "explanation": "accepted", "score": 0.9},
             },
+        )
+
+
+class AppDefaultConfigTestCase(TestCase):
+    def test_default_service_config_includes_huggingface_model_matrix(self) -> None:
+        config = app.load_service_config([app.DEFAULT_CONFIG_PATH])
+
+        self.assertIn("llamafile", config.profiles)
+        self.assertIn("encoderfile", config.profiles)
+        configured_guardrails = {profile.guardrail_name for profile in config.profiles.values()}
+        self.assertEqual(configured_guardrails, set(GuardrailName))
+        self.assertEqual(len(config.profiles), len(GuardrailName) + 2)
+        self.assertEqual(
+            config.profiles["llamafile"].validate_kwargs["api_base"],
+            "http://llamafile.guardrails.example.com:8080/v1",
+        )
+        self.assertEqual(
+            config.profiles["encoderfile"].validate_kwargs["api_base"],
+            "http://encoderfile.guardrails.example.com:8080/v1",
         )
