@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from any_guardrail import GuardrailOutput
+from any_guardrail import GuardrailName, GuardrailOutput
 from fastapi.testclient import TestClient
 
 import app
@@ -107,3 +107,9 @@ class AppTestCase(TestCase):
                 {"name": "policy-b", "guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
             ],
         )
+
+    def test_default_service_config_includes_all_guardrail_profiles(self) -> None:
+        config = app.load_service_config([app.DEFAULT_CONFIG_PATH])
+
+        configured_guardrails = {profile.guardrail_name for profile in config.profiles.values()}
+        self.assertEqual(configured_guardrails, set(GuardrailName))
