@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from anyio import to_thread
 from any_guardrail import AnyGuardrail, GuardrailName, GuardrailOutput, HuggingFaceProvider
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "service.yaml"
 
@@ -61,7 +63,13 @@ class GuardrailProfileConfig(BaseModel):
 class ServiceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    class ThreadpoolConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        max_workers: int = Field(ge=1)
+
     profiles: dict[str, GuardrailProfileConfig] = Field(default_factory=dict)
+    threadpool: ThreadpoolConfig
 
 
 class GuardrailProfileSummary(BaseModel):
@@ -99,6 +107,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
     merged_profiles: dict[str, GuardrailProfileConfig] = {}
+    merged_threadpool: ServiceConfig.ThreadpoolConfig | None = None
 
     for path in paths or get_config_paths():
         config = ServiceConfig.model_validate(load_yaml(path))
@@ -108,8 +117,18 @@ def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
             msg = f"Duplicate profile names found across configuration files: {duplicates}"
             raise ValueError(msg)
         merged_profiles.update(config.profiles)
+        merged_threadpool = config.threadpool
 
-    return ServiceConfig(profiles=merged_profiles)
+    if merged_threadpool is None:
+        msg = "Threadpool configuration must be explicitly set."
+        raise ValueError(msg)
+
+    return ServiceConfig(profiles=merged_profiles, threadpool=merged_threadpool)
+
+
+def apply_threadpool_settings(config: ServiceConfig) -> None:
+    limiter = to_thread.current_default_thread_limiter()
+    limiter.total_tokens = config.threadpool.max_workers
 
 
 def get_service_config() -> ServiceConfig:
@@ -128,13 +147,18 @@ def serialize_result(result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutp
 app = FastAPI(title="Any Guardrail Service", version="0.1.0")
 
 
+@app.on_event("startup")
+async def configure_threadpool() -> None:
+    apply_threadpool_settings(load_service_config())
+
+
 @app.get("/healthz")
-def healthcheck() -> dict[str, str]:
+async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/profiles", response_model=list[GuardrailProfileSummary])
-def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[GuardrailProfileSummary]:
+async def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[GuardrailProfileSummary]:
     return [
         GuardrailProfileSummary(
             name=name,
@@ -146,19 +170,19 @@ def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[G
 
 
 @app.post("/validate", response_model=ValidateResponse)
-def validate(request: ValidateRequest, config: ServiceConfig = Depends(get_service_config)) -> ValidateResponse:
+async def validate(request: ValidateRequest, config: ServiceConfig = Depends(get_service_config)) -> ValidateResponse:
     profile = config.profiles.get(request.profile)
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Unknown profile: {request.profile}")
 
-    guardrail = profile.build_guardrail()
+    guardrail = await run_in_threadpool(profile.build_guardrail)
     validate_kwargs = {**profile.validate_kwargs, **request.validate_kwargs}
 
     try:
         if request.input_text is None:
-            result = guardrail.validate(**validate_kwargs)
+            result = await run_in_threadpool(guardrail.validate, **validate_kwargs)
         else:
-            result = guardrail.validate(request.input_text, **validate_kwargs)
+            result = await run_in_threadpool(guardrail.validate, request.input_text, **validate_kwargs)
     except TypeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

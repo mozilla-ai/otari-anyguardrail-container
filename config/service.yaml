@@ -1,3 +1,5 @@
+threadpool:
+  max_workers: 40
 profiles:
   alinia:
     guardrail_name: alinia
