@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, TestCase
@@ -6,6 +7,7 @@ from unittest.mock import patch
 from any_guardrail import GuardrailName, GuardrailOutput
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 
 import app
 
@@ -20,12 +22,20 @@ class FakeGuardrail:
 
 
 class AppTestCase(TestCase):
+    def test_app_handlers_are_async_except_sync_service_config(self) -> None:
+        self.assertFalse(inspect.iscoroutinefunction(app.get_service_config))
+        self.assertTrue(inspect.iscoroutinefunction(app.healthcheck))
+        self.assertTrue(inspect.iscoroutinefunction(app.list_profiles))
+        self.assertTrue(inspect.iscoroutinefunction(app.validate))
+
     def test_load_service_config_merges_multiple_yaml_files(self) -> None:
         with TemporaryDirectory() as temp_dir:
             first_path = Path(temp_dir) / "first.yaml"
             second_path = Path(temp_dir) / "second.yaml"
 
             first_path.write_text(
+                "threadpool:\n"
+                "  max_workers: 4\n"
                 "profiles:\n"
                 "  prompt-safety:\n"
                 "    guardrail_name: harm_guard\n",
@@ -36,7 +46,9 @@ class AppTestCase(TestCase):
                 "  llm-policy:\n"
                 "    guardrail_name: any_llm\n"
                 "    validate_kwargs:\n"
-                "      policy: no unsafe content\n",
+                "      policy: no unsafe content\n"
+                "threadpool:\n"
+                "  max_workers: 8\n",
                 encoding="utf-8",
             )
 
@@ -44,6 +56,32 @@ class AppTestCase(TestCase):
 
         self.assertEqual(sorted(config.profiles), ["llm-policy", "prompt-safety"])
         self.assertEqual(config.profiles["prompt-safety"].guardrail_name.value, "harm_guard")
+        self.assertEqual(config.threadpool.max_workers, 8)
+
+    def test_load_service_config_requires_explicit_threadpool_settings(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "service.yaml"
+            path.write_text(
+                "profiles:\n"
+                "  prompt-safety:\n"
+                "    guardrail_name: harm_guard\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValidationError):
+                app.load_service_config([path])
+
+    def test_apply_threadpool_settings_sets_default_thread_limiter(self) -> None:
+        class FakeLimiter:
+            total_tokens = 40
+
+        limiter = FakeLimiter()
+        config = app.ServiceConfig.model_validate({"profiles": {}, "threadpool": {"max_workers": 12}})
+
+        with patch("app.to_thread.current_default_thread_limiter", return_value=limiter):
+            app.apply_threadpool_settings(config)
+
+        self.assertEqual(limiter.total_tokens, 12)
 
     def test_validate_endpoint_uses_profile_configuration_and_request_overrides(self) -> None:
         fake_guardrail = FakeGuardrail()
@@ -54,7 +92,8 @@ class AppTestCase(TestCase):
                         "guardrail_name": "any_llm",
                         "validate_kwargs": {"policy": "stay safe"},
                     }
-                }
+                },
+                "threadpool": {"max_workers": 10},
             }
         )
 
@@ -91,7 +130,8 @@ class AppTestCase(TestCase):
                 "profiles": {
                     "policy-a": {"guardrail_name": "any_llm"},
                     "policy-b": {"guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
-                }
+                },
+                "threadpool": {"max_workers": 10},
             }
         )
 
@@ -126,7 +166,8 @@ class AppAsyncE2ETestCase(IsolatedAsyncioTestCase):
                         "guardrail_name": "any_llm",
                         "validate_kwargs": {"policy": "stay safe"},
                     }
-                }
+                },
+                "threadpool": {"max_workers": 10},
             }
         )
 
