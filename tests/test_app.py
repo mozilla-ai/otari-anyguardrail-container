@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from any_guardrail import GuardrailOutput
+from any_guardrail import GuardrailName, GuardrailOutput
 from fastapi.testclient import TestClient
 
 import app
@@ -106,4 +106,21 @@ class AppTestCase(TestCase):
                 {"name": "policy-a", "guardrail_name": "any_llm", "model_id": None},
                 {"name": "policy-b", "guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
             ],
+        )
+
+    def test_default_service_config_includes_huggingface_model_matrix(self) -> None:
+        config = app.load_service_config([app.DEFAULT_CONFIG_PATH])
+
+        self.assertIn("llamafile", config.profiles)
+        self.assertIn("encoderfile", config.profiles)
+        configured_guardrails = {profile.guardrail_name for profile in config.profiles.values()}
+        self.assertEqual(configured_guardrails, set(GuardrailName))
+        self.assertEqual(len(config.profiles), len(GuardrailName) + 2)
+        self.assertEqual(
+            config.profiles["llamafile"].validate_kwargs["api_base"],
+            "http://llamafile.guardrails.example.com:8080/v1",
+        )
+        self.assertEqual(
+            config.profiles["encoderfile"].validate_kwargs["api_base"],
+            "http://encoderfile.guardrails.example.com:8080/v1",
         )
