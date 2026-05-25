@@ -66,10 +66,10 @@ class ServiceConfig(BaseModel):
     class ThreadpoolConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
-        max_workers: int | None = Field(default=None, ge=1)
+        max_workers: int = Field(ge=1)
 
     profiles: dict[str, GuardrailProfileConfig] = Field(default_factory=dict)
-    threadpool: ThreadpoolConfig = Field(default_factory=ThreadpoolConfig)
+    threadpool: ThreadpoolConfig
 
 
 class GuardrailProfileSummary(BaseModel):
@@ -107,7 +107,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
     merged_profiles: dict[str, GuardrailProfileConfig] = {}
-    merged_threadpool = ServiceConfig.ThreadpoolConfig()
+    merged_threadpool: ServiceConfig.ThreadpoolConfig | None = None
 
     for path in paths or get_config_paths():
         config = ServiceConfig.model_validate(load_yaml(path))
@@ -117,15 +117,16 @@ def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
             msg = f"Duplicate profile names found across configuration files: {duplicates}"
             raise ValueError(msg)
         merged_profiles.update(config.profiles)
-        if "max_workers" in config.threadpool.model_fields_set:
-            merged_threadpool.max_workers = config.threadpool.max_workers
+        merged_threadpool = config.threadpool
+
+    if merged_threadpool is None:
+        msg = "Threadpool configuration must be explicitly set."
+        raise ValueError(msg)
 
     return ServiceConfig(profiles=merged_profiles, threadpool=merged_threadpool)
 
 
 def apply_threadpool_settings(config: ServiceConfig) -> None:
-    if config.threadpool.max_workers is None:
-        return
     limiter = to_thread.current_default_thread_limiter()
     limiter.total_tokens = config.threadpool.max_workers
 

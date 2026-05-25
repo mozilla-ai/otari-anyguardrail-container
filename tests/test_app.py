@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from any_guardrail import GuardrailOutput
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import app
 
@@ -32,6 +33,8 @@ class AppTestCase(TestCase):
             second_path = Path(temp_dir) / "second.yaml"
 
             first_path.write_text(
+                "threadpool:\n"
+                "  max_workers: 4\n"
                 "profiles:\n"
                 "  prompt-safety:\n"
                 "    guardrail_name: harm_guard\n",
@@ -54,6 +57,19 @@ class AppTestCase(TestCase):
         self.assertEqual(config.profiles["prompt-safety"].guardrail_name.value, "harm_guard")
         self.assertEqual(config.threadpool.max_workers, 8)
 
+    def test_load_service_config_requires_explicit_threadpool_settings(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "service.yaml"
+            path.write_text(
+                "profiles:\n"
+                "  prompt-safety:\n"
+                "    guardrail_name: harm_guard\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValidationError):
+                app.load_service_config([path])
+
     def test_apply_threadpool_settings_sets_default_thread_limiter(self) -> None:
         class FakeLimiter:
             total_tokens = 40
@@ -75,7 +91,8 @@ class AppTestCase(TestCase):
                         "guardrail_name": "any_llm",
                         "validate_kwargs": {"policy": "stay safe"},
                     }
-                }
+                },
+                "threadpool": {"max_workers": 10},
             }
         )
 
@@ -112,7 +129,8 @@ class AppTestCase(TestCase):
                 "profiles": {
                     "policy-a": {"guardrail_name": "any_llm"},
                     "policy-b": {"guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
-                }
+                },
+                "threadpool": {"max_workers": 10},
             }
         )
 

@@ -7,6 +7,7 @@ Stateless FastAPI service that exposes [`any-guardrail`](https://github.com/mozi
 The service loads one or more YAML files from `ANY_GUARDRAILS_CONFIG_PATHS` (comma-separated paths).
 Each file is validated with Pydantic models and reuses `any-guardrail` types such as `GuardrailName`.
 You can also set `threadpool.max_workers` to tune the shared threadpool used for blocking guardrail operations.
+Threadpool settings do not use implicit defaults and must be explicitly set in configuration.
 
 The default configuration file inside the container is `/app/config/service.yaml`.
 
