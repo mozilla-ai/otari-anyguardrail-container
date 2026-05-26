@@ -18,13 +18,13 @@ class FakeGuardrail:
         return GuardrailOutput(valid=True, explanation="accepted", score=0.9)
 
 
-def _make_config(guardrail_name: str, validate_kwargs: dict | None = None) -> app.ServiceConfig:
+def _make_config(guardrail_name: str, validate_kwargs: dict = {}) -> app.ServiceConfig:
     return app.ServiceConfig.model_validate(
         {
             "profiles": {
                 "test-profile": {
                     "guardrail_name": guardrail_name,
-                    "validate_kwargs": validate_kwargs or {},
+                    "validate_kwargs": validate_kwargs,
                 }
             },
             "threadpool": {"max_workers": 4},
