@@ -1,5 +1,6 @@
 """Tests verifying that each provider's validate interface is called correctly."""
 
+from typing import Any
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
@@ -11,20 +12,20 @@ import app
 
 class FakeGuardrail:
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-    def validate(self, *args, **kwargs):
+    def validate(self, *args: Any, **kwargs: Any) -> GuardrailOutput[Any, Any, Any]:
         self.calls.append((args, kwargs))
         return GuardrailOutput(valid=True, explanation="accepted", score=0.9)
 
 
-def _make_config(guardrail_name: str, validate_kwargs: dict = {}) -> app.ServiceConfig:
+def _make_config(guardrail_name: str, validate_kwargs: dict[str, Any] | None = None) -> app.ServiceConfig:
     return app.ServiceConfig.model_validate(
         {
             "profiles": {
                 "test-profile": {
                     "guardrail_name": guardrail_name,
-                    "validate_kwargs": validate_kwargs,
+                    "validate_kwargs": validate_kwargs or {},
                 }
             },
             "threadpool": {"max_workers": 4},
@@ -39,11 +40,11 @@ class ProviderInterfaceTestCase(IsolatedAsyncioTestCase):
         self,
         guardrail_name: str,
         *,
-        profile_validate_kwargs: dict | None = None,
-        request_input_text: str | list | None = "hello",
-        request_validate_kwargs: dict = {},
-        expected_args: tuple = (),
-        expected_kwargs: dict | None = None,
+        profile_validate_kwargs: dict[str, Any] | None = None,
+        request_input_text: str | list[str] | None = "hello",
+        request_validate_kwargs: dict[str, Any] | None = None,
+        expected_args: tuple[Any, ...] = (),
+        expected_kwargs: dict[str, Any] | None = None,
     ) -> None:
         fake_guardrail = FakeGuardrail()
         config = _make_config(guardrail_name, profile_validate_kwargs)
@@ -60,7 +61,7 @@ class ProviderInterfaceTestCase(IsolatedAsyncioTestCase):
                         json={
                             "profile": "test-profile",
                             "input_text": request_input_text,
-                            "validate_kwargs": request_validate_kwargs,
+                            "validate_kwargs": request_validate_kwargs or {},
                         },
                     )
         finally:
