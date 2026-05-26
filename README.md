@@ -53,14 +53,14 @@ Example request:
 Install dependencies and run the API:
 
 ```bash
-pip install --no-cache-dir -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+uv sync
+uv run uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 Run tests:
 
 ```bash
-python -m pytest tests
+uv run python -m pytest tests
 ```
 
 ## Container usage
