@@ -18,13 +18,13 @@ class FakeGuardrail:
         return GuardrailOutput(valid=True, explanation="accepted", score=0.9)
 
 
-def _make_config(guardrail_name: str, validate_kwargs: dict[str, Any] | None = None) -> app.ServiceConfig:
+def _make_config(guardrail_name: str, validate_kwargs: dict[str, Any] = {}) -> app.ServiceConfig:
     return app.ServiceConfig.model_validate(
         {
             "profiles": {
                 "test-profile": {
                     "guardrail_name": guardrail_name,
-                    "validate_kwargs": validate_kwargs or {},
+                    "validate_kwargs": validate_kwargs,
                 }
             },
             "threadpool": {"max_workers": 4},
@@ -43,11 +43,11 @@ async def _run_interface(
     monkeypatch: pytest.MonkeyPatch,
     guardrail_name: str,
     *,
-    profile_validate_kwargs: dict[str, Any] | None = None,
+    profile_validate_kwargs: dict[str, Any] = {},
     request_input_text: str | list[str] | None = "hello",
-    request_validate_kwargs: dict[str, Any] | None = None,
+    request_validate_kwargs: dict[str, Any] = {},
     expected_args: tuple[Any, ...] = (),
-    expected_kwargs: dict[str, Any] | None = None,
+    expected_kwargs: dict[str, Any] = {},
 ) -> None:
     fake_guardrail = FakeGuardrail()
     config = _make_config(guardrail_name, profile_validate_kwargs)
@@ -64,7 +64,7 @@ async def _run_interface(
             json={
                 "profile": "test-profile",
                 "input_text": request_input_text,
-                "validate_kwargs": request_validate_kwargs or {},
+                "validate_kwargs": request_validate_kwargs,
             },
         )
 
@@ -72,7 +72,7 @@ async def _run_interface(
     assert len(fake_guardrail.calls) == 1
     actual_args, actual_kwargs = fake_guardrail.calls[0]
     assert actual_args == expected_args
-    assert actual_kwargs == (expected_kwargs if expected_kwargs is not None else {})
+    assert actual_kwargs == expected_kwargs
 
 
 pytestmark = pytest.mark.anyio
