@@ -1,4 +1,5 @@
 import inspect
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, TestCase
@@ -148,6 +149,77 @@ class AppTestCase(TestCase):
                 {"name": "policy-b", "guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
             ],
         )
+
+class ResolveEnvVarsTestCase(TestCase):
+    def test_resolve_env_vars_replaces_pattern_with_env_var_value(self) -> None:
+        with patch.dict(os.environ, {"HF_TOKEN": "hf-secret-token"}):
+            result = app.resolve_env_vars("${HF_TOKEN}")
+        self.assertEqual(result, "hf-secret-token")
+
+    def test_resolve_env_vars_replaces_pattern_inside_nested_dict(self) -> None:
+        with patch.dict(os.environ, {"HF_TOKEN": "hf-secret-token"}):
+            result = app.resolve_env_vars({"init_kwargs": {"token": "${HF_TOKEN}"}})
+        self.assertEqual(result, {"init_kwargs": {"token": "hf-secret-token"}})
+
+    def test_resolve_env_vars_replaces_pattern_inside_list(self) -> None:
+        with patch.dict(os.environ, {"MY_VAR": "my-value"}):
+            result = app.resolve_env_vars(["${MY_VAR}", "literal"])
+        self.assertEqual(result, ["my-value", "literal"])
+
+    def test_resolve_env_vars_raises_for_unset_variable(self) -> None:
+        env_without_var = {k: v for k, v in os.environ.items() if k != "UNSET_VAR"}
+        with patch.dict(os.environ, env_without_var, clear=True):
+            with self.assertRaises(ValueError, msg="Environment variable referenced in configuration is not set: UNSET_VAR"):
+                app.resolve_env_vars("${UNSET_VAR}")
+
+    def test_resolve_env_vars_leaves_non_pattern_strings_unchanged(self) -> None:
+        result = app.resolve_env_vars("plain-value")
+        self.assertEqual(result, "plain-value")
+
+    def test_resolve_env_vars_leaves_non_string_scalars_unchanged(self) -> None:
+        self.assertIsNone(app.resolve_env_vars(None))
+        self.assertEqual(app.resolve_env_vars(42), 42)
+        self.assertEqual(app.resolve_env_vars(3.14), 3.14)
+        self.assertIs(app.resolve_env_vars(True), True)
+
+    def test_load_yaml_resolves_env_vars_in_config(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "service.yaml"
+            path.write_text(
+                "threadpool:\n"
+                "  max_workers: 4\n"
+                "profiles:\n"
+                "  hf-profile:\n"
+                "    guardrail_name: harm_guard\n"
+                "    init_kwargs:\n"
+                "      token: ${HF_TOKEN}\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"HF_TOKEN": "hf-secret-token"}):
+                config = app.load_service_config([path])
+
+        self.assertEqual(config.profiles["hf-profile"].init_kwargs["token"], "hf-secret-token")
+
+    def test_load_yaml_raises_for_unset_env_var_in_config(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "service.yaml"
+            path.write_text(
+                "threadpool:\n"
+                "  max_workers: 4\n"
+                "profiles:\n"
+                "  hf-profile:\n"
+                "    guardrail_name: harm_guard\n"
+                "    init_kwargs:\n"
+                "      token: ${HF_TOKEN}\n",
+                encoding="utf-8",
+            )
+
+            env_without_token = {k: v for k, v in os.environ.items() if k != "HF_TOKEN"}
+            with patch.dict(os.environ, env_without_token, clear=True):
+                with self.assertRaises(ValueError):
+                    app.load_service_config([path])
+
 
 class AppAsyncE2ETestCase(IsolatedAsyncioTestCase):
     async def test_healthcheck_endpoint_returns_ok(self) -> None:

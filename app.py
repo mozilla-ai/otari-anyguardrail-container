@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -96,13 +97,40 @@ def get_config_paths() -> list[Path]:
     return [Path(path.strip()) for path in raw_value.split(",") if path.strip()]
 
 
+_ENV_VAR_PATTERN = re.compile(r"^\$\{([^}]+)\}$")
+
+
+def resolve_env_vars(data: Any) -> Any:
+    """Recursively resolve ``${VAR_NAME}`` references in *data* to their environment variable values.
+
+    Any string value that exactly matches the pattern ``${VAR_NAME}`` is replaced with the value of
+    the ``VAR_NAME`` environment variable.  A :exc:`ValueError` is raised if the variable is not set,
+    so configuration errors are surfaced early rather than at runtime.  All other values (non-string
+    scalars, dicts, lists) are traversed or returned unchanged.
+    """
+    if isinstance(data, str):
+        match = _ENV_VAR_PATTERN.match(data)
+        if match:
+            var_name = match.group(1)
+            value = os.getenv(var_name)
+            if value is None:
+                msg = f"Environment variable referenced in configuration is not set: {var_name}"
+                raise ValueError(msg)
+            return value
+    elif isinstance(data, dict):
+        return {key: resolve_env_vars(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [resolve_env_vars(item) for item in data]
+    return data
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle) or {}
     if not isinstance(loaded, dict):
         msg = f"Configuration file must contain a YAML mapping: {path}"
         raise ValueError(msg)
-    return loaded
+    return resolve_env_vars(loaded)
 
 
 def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:

@@ -11,6 +11,40 @@ Threadpool settings do not use implicit defaults and must be explicitly set in c
 
 The default configuration file inside the container is `/app/config/service.yaml`.
 
+### Environment variable interpolation
+
+Any string value in a configuration file can reference an environment variable using the `${VAR_NAME}` syntax.
+The variable is resolved at load time; a missing variable causes the service to fail with a clear error message.
+This is the recommended way to supply secrets such as API tokens without hardcoding them in config files.
+
+Supported variables include (but are not limited to):
+
+| Variable | Description |
+|----------|-------------|
+| `HF_TOKEN` | Hugging Face access token, e.g. for gated models |
+
+Example:
+
+```yaml
+threadpool:
+  max_workers: 40
+profiles:
+  prompt-safety:
+    guardrail_name: harm_guard
+    model_id: hbseong/HarmAug-Guard
+    init_kwargs:
+      token: ${HF_TOKEN}
+```
+
+Run the container with the variable set:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e ANY_GUARDRAILS_CONFIG_PATHS=/app/config/service.yaml \
+  -e HF_TOKEN=hf_… \
+  otari-anyguardrails-container
+```
+
 Example:
 
 ```yaml
