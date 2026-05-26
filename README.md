@@ -65,11 +65,21 @@ uv run python -m pytest tests
 
 ## Container usage
 
+You can use a volume to cache models from HuggingFace:
+
+```bash
+docker volume create otari-anyguardrails-volume
+```
+
 Build and run:
 
 ```bash
 docker build -t otari-anyguardrails-container .
 docker run --rm -p 8000:8000 \
+  --name otari-anyguardrails \
   -e ANY_GUARDRAILS_CONFIG_PATHS=/app/config/service.yaml \
+  -e HF_TOKEN=<your token here> \
+  -e HF_HUB_CACHE=/app/hf_cache \
+  -v otari-anyguardrails-volume:/app/hf_cache \
   otari-anyguardrails-container
 ```
