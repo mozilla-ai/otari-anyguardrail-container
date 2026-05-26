@@ -41,7 +41,7 @@ class ProviderInterfaceTestCase(IsolatedAsyncioTestCase):
         *,
         profile_validate_kwargs: dict | None = None,
         request_input_text: str | list | None = "hello",
-        request_validate_kwargs: dict | None = None,
+        request_validate_kwargs: dict = {},
         expected_args: tuple = (),
         expected_kwargs: dict | None = None,
     ) -> None:
@@ -60,7 +60,7 @@ class ProviderInterfaceTestCase(IsolatedAsyncioTestCase):
                         json={
                             "profile": "test-profile",
                             "input_text": request_input_text,
-                            "validate_kwargs": request_validate_kwargs or {},
+                            "validate_kwargs": request_validate_kwargs,
                         },
                     )
         finally:
