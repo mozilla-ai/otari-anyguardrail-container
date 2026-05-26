@@ -60,7 +60,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 Run tests:
 
 ```bash
-python -m unittest discover -s tests
+python -m pytest tests
 ```
 
 ## Container usage
