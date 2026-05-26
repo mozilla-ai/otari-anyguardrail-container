@@ -1,11 +1,12 @@
 import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import TestCase
+from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import patch
 
 from any_guardrail import GuardrailName, GuardrailOutput
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 import app
@@ -148,6 +149,57 @@ class AppTestCase(TestCase):
             ],
         )
 
+class AppAsyncE2ETestCase(IsolatedAsyncioTestCase):
+    async def test_healthcheck_endpoint_returns_ok(self) -> None:
+        async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
+            response = await client.get("/healthz")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    async def test_validate_endpoint_supports_async_client(self) -> None:
+        fake_guardrail = FakeGuardrail()
+        config = app.ServiceConfig.model_validate(
+            {
+                "profiles": {
+                    "llm-policy": {
+                        "guardrail_name": "any_llm",
+                        "validate_kwargs": {"policy": "stay safe"},
+                    }
+                },
+                "threadpool": {"max_workers": 10},
+            }
+        )
+
+        app.app.dependency_overrides[app.get_service_config] = lambda: config
+        try:
+            with patch("app.AnyGuardrail.create", return_value=fake_guardrail):
+                async with AsyncClient(
+                    transport=ASGITransport(app=app.app),
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.post(
+                        "/validate",
+                        json={
+                            "profile": "llm-policy",
+                            "input_text": "hello",
+                            "validate_kwargs": {"model_id": "openai:gpt-5-nano"},
+                        },
+                    )
+        finally:
+            app.app.dependency_overrides.clear()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "profile": "llm-policy",
+                "result": {"valid": True, "explanation": "accepted", "score": 0.9},
+            },
+        )
+
+
+class AppDefaultConfigTestCase(TestCase):
     def test_default_service_config_includes_huggingface_model_matrix(self) -> None:
         config = app.load_service_config([app.DEFAULT_CONFIG_PATH])
 
