@@ -46,7 +46,7 @@ class ProviderInterfaceTestCase(IsolatedAsyncioTestCase):
         expected_kwargs: dict | None = None,
     ) -> None:
         fake_guardrail = FakeGuardrail()
-        config = _make_config(guardrail_name, profile_validate_kwargs)
+        config = _make_config(guardrail_name, profile_validate_kwargs or {})
 
         app.app.dependency_overrides[app.get_service_config] = lambda: config
         try:
