@@ -1,6 +1,6 @@
 """Tests verifying that each provider's validate interface is called correctly."""
 
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 from any_guardrail import GuardrailOutput
@@ -33,7 +33,7 @@ def _make_config(guardrail_name: str, validate_kwargs: dict[str, Any] = {}) -> a
 
 
 @pytest.fixture(autouse=True)
-def clear_dependency_overrides() -> None:
+def clear_dependency_overrides() -> Generator[None, None, None]:
     app.app.dependency_overrides.clear()
     yield
     app.app.dependency_overrides.clear()

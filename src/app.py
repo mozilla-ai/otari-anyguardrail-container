@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "service.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "service.yaml"
 
 
 class HuggingFaceProviderConfig(BaseModel):
