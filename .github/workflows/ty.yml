@@ -16,13 +16,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install --no-cache-dir -r requirements.txt ty
+        run: uv sync --frozen --dev
 
       - name: Run ty
-        run: ty check --output-format github
+        run: uv run ty check --output-format github

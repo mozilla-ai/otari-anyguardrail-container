@@ -1,6 +1,7 @@
 import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Generator
 
 import pytest
 from any_guardrail import GuardrailName, GuardrailOutput
@@ -20,7 +21,7 @@ class FakeGuardrail:
 
 
 @pytest.fixture(autouse=True)
-def clear_dependency_overrides() -> None:
+def clear_dependency_overrides() -> Generator[None, None, None]:
     app.app.dependency_overrides.clear()
     yield
     app.app.dependency_overrides.clear()
