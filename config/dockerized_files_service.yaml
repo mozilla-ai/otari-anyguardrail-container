@@ -18,6 +18,13 @@ guardrails:
     provider: encoderfile
     model_id: DuoGuard/DuoGuard-0.5B
 
+  granite-guardian:
+    guardrail_name: granite_guardian
+    provider: llamafile
+    model_id: ibm-granite/granite-guardian-4.1-8b
+    init_kwargs:
+      criteria: "The text promotes, glorifies, or provides detailed instructions for violent acts against people, animals, or property."
+
   shield-gemma:
     guardrail_name: shield_gemma
     provider: huggingface

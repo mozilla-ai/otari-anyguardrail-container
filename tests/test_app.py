@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Generator
 
+import numpy as np
 import pytest
 from any_guardrail import GuardrailName, GuardrailOutput
 from httpx import ASGITransport, AsyncClient
@@ -206,6 +207,46 @@ async def test_healthcheck_endpoint_returns_ok() -> None:
 @pytest.mark.anyio
 async def test_validate_endpoint_supports_async_client(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_guardrail = FakeGuardrail()
+    config = app.ServiceConfig.model_validate(
+        {
+            "providers": {},
+            "guardrails": {
+                "llm-policy": {
+                    "guardrail_name": "any_llm",
+                    "validate_kwargs": {"policy": "stay safe"},
+                }
+            },
+            "threadpool": {"max_workers": 10},
+        }
+    )
+
+    app.app.dependency_overrides[app.get_service_config] = lambda: config
+    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {"llm-policy": fake_guardrail}
+
+    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
+        response = await client.post(
+            "/validate",
+            json={
+                "profile": "llm-policy",
+                "input_text": "hello",
+                "validate_kwargs": {"model_id": "openai:gpt-5-nano"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "profile": "llm-policy",
+        "result": {"valid": True, "explanation": "accepted", "score": 0.9},
+    }
+
+
+@pytest.mark.anyio
+async def test_validate_endpoint_serializes_numpy_bool_to_python_bool() -> None:
+    class FakeNumpyBoolGuardrail:
+        def validate(self, *args, **kwargs):
+            return GuardrailOutput(valid=np.bool_(True), explanation="accepted", score=0.9)
+
+    fake_guardrail = FakeNumpyBoolGuardrail()
     config = app.ServiceConfig.model_validate(
         {
             "providers": {},

@@ -3,7 +3,7 @@ name = "otari-anyguardrails-container"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "any-guardrail[all]",
+    "any-guardrail[all]==0.5.1",
     "fastapi==0.136.3",
     "pyyaml==6.0.3",
     "uvicorn==0.48.0",
@@ -19,9 +19,6 @@ dev = [
 [tool.uv]
 package = false
 default-groups = []
-
-[tool.uv.sources]
-any-guardrail = { path = "any-guardrail" }
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

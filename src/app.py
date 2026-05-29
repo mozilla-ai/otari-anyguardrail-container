@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from anyio import to_thread
 from any_guardrail import GuardrailOutput
@@ -146,9 +147,20 @@ async def reload_service_state(app: FastAPI, paths: list[Path] | None = None) ->
 
 
 def serialize_result(result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutput[Any, Any, Any]]) -> Any:
+    def _normalize_numpy_scalars(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: _normalize_numpy_scalars(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [_normalize_numpy_scalars(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(_normalize_numpy_scalars(item) for item in value)
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
     if isinstance(result, list):
-        return [item.model_dump(mode="json") for item in result]
-    return result.model_dump(mode="json")
+        return [_normalize_numpy_scalars(item.model_dump(mode="python")) for item in result]
+    return _normalize_numpy_scalars(result.model_dump(mode="python"))
 
 
 @asynccontextmanager
@@ -205,6 +217,7 @@ async def validate(
             result = await run_in_threadpool(guardrail.validate, request.input_text, **validate_kwargs)
     except TypeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    logging.info(f"Validation result for profile {request.profile}: {result}")
 
     return ValidateResponse(profile=request.profile, result=serialize_result(result))
 

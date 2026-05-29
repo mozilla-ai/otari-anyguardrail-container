@@ -59,10 +59,15 @@ wheels = [
 
 [[package]]
 name = "any-guardrail"
-source = { directory = "any-guardrail" }
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "any-llm-sdk" },
     { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bb/4f/e67b7d189533effa64ab3f692c8d88f0924b09271b466aa516f43af25047/any_guardrail-0.5.1.tar.gz", hash = "sha256:604479a0f0a34646f9c37a718835ce81b912562178685657fe88acea1526bc6a", size = 229227 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/53/6f/151fca65e6ec1c771a619df971d8aed4e497b8c20c8583afe651f35e46f8/any_guardrail-0.5.1-py3-none-any.whl", hash = "sha256:e3b604246beb2eb398207a841f6c446e4506c2ef59c0c291cdc45b80a9fb2e97", size = 73858 },
 ]
 
 [package.optional-dependencies]
@@ -75,83 +80,6 @@ all = [
     { name = "pathvalidate" },
     { name = "torch" },
     { name = "transformers" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "any-guardrail", extras = ["azure-content-safety", "encoderfile", "flowjudge", "huggingface", "llamafile"], marker = "extra == 'all'" },
-    { name = "any-llm-sdk", specifier = ">=1.7.0" },
-    { name = "azure-ai-contentsafety", marker = "extra == 'azure-content-safety'", specifier = ">=1.0.0" },
-    { name = "flow-judge", extras = ["hf"], marker = "extra == 'flowjudge'", specifier = ">=0.1.2" },
-    { name = "hf-xet", marker = "extra == 'encoderfile'", specifier = ">=1.1.5" },
-    { name = "hf-xet", marker = "extra == 'huggingface'", specifier = ">=1.1.5" },
-    { name = "hf-xet", marker = "extra == 'llamafile'", specifier = ">=1.1.5" },
-    { name = "huggingface-hub", marker = "extra == 'encoderfile'", specifier = ">=0.33.4" },
-    { name = "huggingface-hub", marker = "extra == 'huggingface'", specifier = ">=0.33.4" },
-    { name = "huggingface-hub", marker = "extra == 'llamafile'", specifier = ">=0.33.4" },
-    { name = "numpy", marker = "extra == 'encoderfile'", specifier = ">=1.26" },
-    { name = "pathvalidate", marker = "extra == 'azure-content-safety'", specifier = ">=3.3.1" },
-    { name = "pydantic" },
-    { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.7.1" },
-    { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.53.2" },
-]
-provides-extras = ["all", "flowjudge", "huggingface", "azure-content-safety", "encoderfile", "llamafile"]
-
-[package.metadata.requires-dev]
-all = [
-    { name = "debugpy" },
-    { name = "mkdocs" },
-    { name = "mkdocs-include-markdown-plugin", specifier = ">=7.1.5" },
-    { name = "mkdocs-jupyter", specifier = ">=0.25.1" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings-python" },
-    { name = "mktestdocs", specifier = ">=0.2.4" },
-    { name = "mypy", git = "https://github.com/python/mypy.git" },
-    { name = "pre-commit", specifier = "==4.6.0" },
-    { name = "pre-commit-uv", specifier = "==4.2.1" },
-    { name = "pytest", specifier = ">=8,<10" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0" },
-    { name = "pytest-rerunfailures", specifier = ">=14.0" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist", specifier = ">=3.6.1" },
-]
-dev = [
-    { name = "debugpy" },
-    { name = "mkdocs" },
-    { name = "mkdocs-include-markdown-plugin", specifier = ">=7.1.5" },
-    { name = "mkdocs-jupyter", specifier = ">=0.25.1" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings-python" },
-    { name = "mktestdocs", specifier = ">=0.2.4" },
-    { name = "mypy", git = "https://github.com/python/mypy.git" },
-    { name = "pre-commit", specifier = "==4.6.0" },
-    { name = "pre-commit-uv", specifier = "==4.2.1" },
-    { name = "pytest", specifier = ">=8,<10" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0" },
-    { name = "pytest-rerunfailures", specifier = ">=14.0" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist", specifier = ">=3.6.1" },
-]
-docs = [
-    { name = "mkdocs" },
-    { name = "mkdocs-include-markdown-plugin", specifier = ">=7.1.5" },
-    { name = "mkdocs-jupyter", specifier = ">=0.25.1" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings-python" },
-]
-lint = [
-    { name = "mypy", git = "https://github.com/python/mypy.git" },
-    { name = "pre-commit", specifier = "==4.6.0" },
-    { name = "pre-commit-uv", specifier = "==4.2.1" },
-]
-tests = [
-    { name = "debugpy" },
-    { name = "mktestdocs", specifier = ">=0.2.4" },
-    { name = "pytest", specifier = ">=8,<10" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0" },
-    { name = "pytest-rerunfailures", specifier = ">=14.0" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist", specifier = ">=3.6.1" },
 ]
 
 [[package]]
@@ -1333,7 +1261,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "any-guardrail", extras = ["all"], directory = "any-guardrail" },
+    { name = "any-guardrail", extras = ["all"], specifier = "==0.5.1" },
     { name = "fastapi", specifier = "==0.136.3" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "uvicorn", specifier = "==0.48.0" },
