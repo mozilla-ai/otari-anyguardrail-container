@@ -5,10 +5,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
+# This is only meant for local tests
+COPY any-guardrail ./any-guardrail
+ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0"
+#
 # Warning: this uses the first interpreter found.
 RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
 
-COPY src/app.py .
+COPY src/* ./
 COPY config ./config
 
 EXPOSE 8000

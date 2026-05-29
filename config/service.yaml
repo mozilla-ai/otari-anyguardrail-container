@@ -1,6 +1,18 @@
 threadpool:
   max_workers: 40
-profiles:
+providers:
+  huggingface:
+    type: HuggingfaceProvider
+
+  llamafile:
+    type: LlamafileProvider
+    binary_path: granite-guardian-4.1-8b.Q6_K.llamafile
+
+  encoderfile:
+    type: EncoderfileProvider
+    binary_path: DuoGuard-0.5B.aarch64-apple-darwin.encoderfile
+
+guardrails:
   alinia:
     guardrail_name: alinia
     init_kwargs:
@@ -17,9 +29,11 @@ profiles:
 
   deepset:
     guardrail_name: deepset
+    provider: huggingface
 
   duo-guard:
     guardrail_name: duo_guard
+    provider: huggingface
 
   flowjudge:
     guardrail_name: flowjudge
@@ -41,46 +55,55 @@ profiles:
 
   granite-guardian:
     guardrail_name: granite_guardian
+    provider: huggingface
     init_kwargs:
       criteria: Does the request ask for unsafe or disallowed content?
 
   harm-guard:
     guardrail_name: harm_guard
+    provider: huggingface
 
   injec-guard:
     guardrail_name: injec_guard
+    provider: huggingface
 
   jasper:
     guardrail_name: jasper
+    provider: huggingface
 
   llama-guard:
     guardrail_name: llama_guard
+    provider: huggingface
 
   off-topic:
     guardrail_name: off_topic
+    provider: huggingface
 
   pangolin:
     guardrail_name: pangolin
+    provider: huggingface
 
   protectai:
     guardrail_name: protectai
+    provider: huggingface
 
   sentinel:
     guardrail_name: sentinel
+    provider: huggingface
 
   shield-gemma:
     guardrail_name: shield_gemma
+    provider: huggingface
     init_kwargs:
       policy: Disallow unsafe requests and responses.
 
   llamafile:
-    guardrail_name: any_llm
-    validate_kwargs:
-      model_id: openai:llamafile
-      api_base: http://llamafile.guardrails.example.com:8080/v1
+    guardrail_name: granite_guardian
+    provider: llamafile
+    init_kwargs:
+      criteria: Does the request ask for unsafe or disallowed content?
 
   encoderfile:
-    guardrail_name: any_llm
-    validate_kwargs:
-      model_id: openai:encoderfile
-      api_base: http://encoderfile.guardrails.example.com:8080/v1
+    guardrail_name: duo_guard
+    provider: encoderfile
+    model_id: DuoGuard/DuoGuard-0.5B

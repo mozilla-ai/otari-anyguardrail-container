@@ -1,0 +1,47 @@
+services:
+  otari-anyguardrails:
+    image: otari-anyguardrails-container
+    container_name: otari-anyguardrails
+    ports:
+      - "8000:8000"
+    environment:
+      ANY_GUARDRAILS_CONFIG_PATHS: /app/ext-config/dockerized_files_service.yaml
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HUB_CACHE: /app/hf_cache
+    volumes:
+    # external: true
+      - otari-anyguardrails-volume:/app/hf_cache
+      - ./config:/app/ext-config:ro
+    networks:
+      - otari-net
+
+  encoderfile-example-1:
+    build:
+      context: .
+      dockerfile: encoderfile.dockerfile
+    image: encoderfile-example-1
+    container_name: encoderfile-example-1
+    # ports:
+    #   - "8080:8080"
+    networks:
+      - otari-net
+
+  llamafile-example-1:
+    build:
+      context: .
+      dockerfile: llamafile.dockerfile
+    image: llamafile-example-1
+    container_name: llamafile-example-1
+    # ports:
+    #   - "8080:8080"
+    networks:
+      - otari-net
+
+networks:
+  otari-net:
+    name: otari-net
+
+volumes:
+  otari-anyguardrails-volume:
+    name: otari-anyguardrails-volume
+    external: true
