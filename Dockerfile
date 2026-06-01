@@ -8,7 +8,7 @@ COPY pyproject.toml uv.lock ./
 # Warning: this uses the first interpreter found.
 RUN UV_SYSTEM_PYTHON=1 uv sync --frozen --no-dev
 
-COPY src/app.py .
+COPY src/* ./
 COPY config ./config
 
 EXPOSE 8000

@@ -1,0 +1,33 @@
+threadpool:
+  max_workers: 40
+providers:
+  huggingface:
+    type: HuggingfaceProvider
+
+  encoderfile:
+    type: EncoderfileProvider
+    base_url: "http://encoderfile-example-1:8080"
+
+  llamafile:
+    type: LlamafileProvider
+    base_url: "http://llamafile-example-1:8080"
+
+guardrails:
+  duo-guard:
+    guardrail_name: duo_guard
+    provider: encoderfile
+    model_id: DuoGuard/DuoGuard-0.5B
+
+  granite-guardian:
+    guardrail_name: granite_guardian
+    provider: llamafile
+    model_id: ibm-granite/granite-guardian-4.1-8b
+    init_kwargs:
+      criteria: "The text promotes, glorifies, or provides detailed instructions for violent acts against people, animals, or property."
+
+  shield-gemma:
+    guardrail_name: shield_gemma
+    provider: huggingface
+    init_kwargs:
+      policy: Disallow unsafe requests and responses.
+
