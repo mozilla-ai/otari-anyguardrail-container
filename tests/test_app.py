@@ -81,9 +81,7 @@ def test_load_service_config_requires_explicit_threadpool_settings() -> None:
     with TemporaryDirectory() as temp_dir:
         path = Path(temp_dir) / "service.yaml"
         path.write_text(
-            "guardrails:\n"
-            "  prompt-safety:\n"
-            "    guardrail_name: harm_guard\n",
+            "guardrails:\n  prompt-safety:\n    guardrail_name: harm_guard\n",
             encoding="utf-8",
         )
 
@@ -91,20 +89,28 @@ def test_load_service_config_requires_explicit_threadpool_settings() -> None:
             app.load_service_config([path])
 
 
-def test_apply_threadpool_settings_sets_default_thread_limiter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_threadpool_settings_sets_default_thread_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class FakeLimiter:
         total_tokens = 40
 
     limiter = FakeLimiter()
-    config = app.ServiceConfig.model_validate({"providers": {}, "guardrails": {}, "threadpool": {"max_workers": 12}})
+    config = app.ServiceConfig.model_validate(
+        {"providers": {}, "guardrails": {}, "threadpool": {"max_workers": 12}}
+    )
 
-    monkeypatch.setattr(app.to_thread, "current_default_thread_limiter", lambda: limiter)
+    monkeypatch.setattr(
+        app.to_thread, "current_default_thread_limiter", lambda: limiter
+    )
     app.apply_threadpool_settings(config)
 
     assert limiter.total_tokens == 12
 
 
-def test_initialize_logging_uses_default_info_level(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_initialize_logging_uses_default_info_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, int] = {}
 
     def fake_basic_config(*, level: int) -> None:
@@ -118,7 +124,9 @@ def test_initialize_logging_uses_default_info_level(monkeypatch: pytest.MonkeyPa
     assert captured["level"] == logging.INFO
 
 
-def test_initialize_logging_uses_log_level_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_initialize_logging_uses_log_level_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, int] = {}
 
     def fake_basic_config(*, level: int) -> None:
@@ -133,7 +141,98 @@ def test_initialize_logging_uses_log_level_env_var(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.anyio
-async def test_validate_endpoint_uses_profile_configuration_and_request_overrides(
+async def test_validate_endpoint_uses_profile_configuration_and_request_overrides() -> (
+    None
+):
+    fake_guardrail = FakeGuardrail()
+    config = app.ServiceConfig.model_validate(
+        {
+            "providers": {},
+            "guardrails": {
+                "llm-policy": {
+                    "guardrail_name": "any_llm",
+                    "validate_kwargs": {"policy": "stay safe"},
+                }
+            },
+            "threadpool": {"max_workers": 10},
+        }
+    )
+
+    app.app.dependency_overrides[app.get_service_config] = lambda: config
+    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {
+        "llm-policy": fake_guardrail
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app.app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/validate",
+            json={
+                "profile": "llm-policy",
+                "input_text": "hello",
+                "validate_kwargs": {"model_id": "openai:gpt-5-nano"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "profile": "llm-policy",
+        "result": {"valid": True, "explanation": "accepted", "score": 0.9},
+    }
+    assert fake_guardrail.calls == [
+        (("hello",), {"policy": "stay safe", "model_id": "openai:gpt-5-nano"})
+    ]
+
+
+@pytest.mark.anyio
+async def test_profiles_endpoint_lists_available_profiles() -> None:
+    config = app.ServiceConfig.model_validate(
+        {
+            "providers": {},
+            "guardrails": {
+                "policy-a": {"guardrail_name": "any_llm"},
+                "policy-b": {
+                    "guardrail_name": "harm_guard",
+                    "model_id": "hbseong/HarmAug-Guard",
+                },
+            },
+            "threadpool": {"max_workers": 10},
+        }
+    )
+
+    app.app.dependency_overrides[app.get_service_config] = lambda: config
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app.app), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/profiles")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"name": "policy-a", "guardrail_name": "any_llm", "model_id": None},
+        {
+            "name": "policy-b",
+            "guardrail_name": "harm_guard",
+            "model_id": "hbseong/HarmAug-Guard",
+        },
+    ]
+
+
+@pytest.mark.anyio
+async def test_healthcheck_endpoint_returns_ok() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app.app), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.anyio
+async def test_validate_endpoint_supports_async_client(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_guardrail = FakeGuardrail()
     config = app.ServiceConfig.model_validate(
@@ -150,80 +249,13 @@ async def test_validate_endpoint_uses_profile_configuration_and_request_override
     )
 
     app.app.dependency_overrides[app.get_service_config] = lambda: config
-    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {"llm-policy": fake_guardrail}
-
-    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
-        response = await client.post(
-            "/validate",
-            json={
-                "profile": "llm-policy",
-                "input_text": "hello",
-                "validate_kwargs": {"model_id": "openai:gpt-5-nano"},
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "profile": "llm-policy",
-        "result": {"valid": True, "explanation": "accepted", "score": 0.9},
+    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {
+        "llm-policy": fake_guardrail
     }
-    assert fake_guardrail.calls == [(("hello",), {"policy": "stay safe", "model_id": "openai:gpt-5-nano"})]
 
-
-@pytest.mark.anyio
-async def test_profiles_endpoint_lists_available_profiles() -> None:
-    config = app.ServiceConfig.model_validate(
-        {
-            "providers": {},
-            "guardrails": {
-                "policy-a": {"guardrail_name": "any_llm"},
-                "policy-b": {"guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
-            },
-            "threadpool": {"max_workers": 10},
-        }
-    )
-
-    app.app.dependency_overrides[app.get_service_config] = lambda: config
-
-    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
-        response = await client.get("/profiles")
-
-    assert response.status_code == 200
-    assert response.json() == [
-        {"name": "policy-a", "guardrail_name": "any_llm", "model_id": None},
-        {"name": "policy-b", "guardrail_name": "harm_guard", "model_id": "hbseong/HarmAug-Guard"},
-    ]
-
-
-@pytest.mark.anyio
-async def test_healthcheck_endpoint_returns_ok() -> None:
-    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
-        response = await client.get("/healthz")
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-@pytest.mark.anyio
-async def test_validate_endpoint_supports_async_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_guardrail = FakeGuardrail()
-    config = app.ServiceConfig.model_validate(
-        {
-            "providers": {},
-            "guardrails": {
-                "llm-policy": {
-                    "guardrail_name": "any_llm",
-                    "validate_kwargs": {"policy": "stay safe"},
-                }
-            },
-            "threadpool": {"max_workers": 10},
-        }
-    )
-
-    app.app.dependency_overrides[app.get_service_config] = lambda: config
-    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {"llm-policy": fake_guardrail}
-
-    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app.app), base_url="http://testserver"
+    ) as client:
         response = await client.post(
             "/validate",
             json={
@@ -244,7 +276,9 @@ async def test_validate_endpoint_supports_async_client(monkeypatch: pytest.Monke
 async def test_validate_endpoint_serializes_numpy_bool_to_python_bool() -> None:
     class FakeNumpyBoolGuardrail:
         def validate(self, *args, **kwargs):
-            return GuardrailOutput(valid=np.bool_(True), explanation="accepted", score=0.9)
+            return GuardrailOutput(
+                valid=np.bool_(True), explanation="accepted", score=0.9
+            )
 
     fake_guardrail = FakeNumpyBoolGuardrail()
     config = app.ServiceConfig.model_validate(
@@ -261,9 +295,13 @@ async def test_validate_endpoint_serializes_numpy_bool_to_python_bool() -> None:
     )
 
     app.app.dependency_overrides[app.get_service_config] = lambda: config
-    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {"llm-policy": fake_guardrail}
+    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {
+        "llm-policy": fake_guardrail
+    }
 
-    async with AsyncClient(transport=ASGITransport(app=app.app), base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app.app), base_url="http://testserver"
+    ) as client:
         response = await client.post(
             "/validate",
             json={
@@ -287,7 +325,9 @@ def test_default_service_config_includes_huggingface_model_matrix() -> None:
     assert "llamafile" in config.guardrails
     assert "encoderfile" in config.guardrails
     assert sorted(config.providers) == ["encoderfile", "huggingface", "llamafile"]
-    configured_guardrails = {profile.guardrail_name for profile in config.guardrails.values()}
+    configured_guardrails = {
+        profile.guardrail_name for profile in config.guardrails.values()
+    }
     assert configured_guardrails == set(GuardrailName)
     assert len(config.guardrails) == len(GuardrailName) + 2
     assert config.guardrails["llamafile"].provider == "llamafile"
@@ -301,7 +341,9 @@ def test_get_config_paths_requires_env_var(monkeypatch: pytest.MonkeyPatch) -> N
         app.get_config_paths()
 
 
-def test_provider_configs_allow_base_url_and_forward_it(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_configs_allow_base_url_and_forward_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     created_kwargs: dict[str, dict[str, object]] = {}
 
     class FakeEncoderfileProvider:

@@ -1,0 +1,61 @@
+name: build-and-push
+
+# Runs on every push and PR to main. Pushes to Docker Hub only on push-to-main
+# (so PR builds verify the Dockerfile still builds but don't pollute the
+# registry with branch images).
+on:
+  workflow_dispatch
+env:
+  IMAGE_NAME: mzdotai/otari-any-guardrail-container
+
+jobs:
+  build-and-push:
+    name: docker build (+ push on main)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only log in (and push) on push events. PRs from forks can't access
+      # secrets anyway; PRs from same-repo branches still skip the push so
+      # that "PR open" doesn't publish branch images.
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            # On every push to main: tag :latest and the short SHA.
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,enable={{is_default_branch}}
+            # On git tag v1.2.3: also tag :1.2.3, :1.2, :1.
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # PR builds get a :pr-<n> tag for debugging if push were enabled.
+            type=ref,event=pr
+
+      - name: Build (and push on main / tags)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -66,7 +66,11 @@ def load_service_config(paths: list[Path] | None = None) -> ServiceConfig:
         msg = "Threadpool configuration must be explicitly set."
         raise ValueError(msg)
 
-    return ServiceConfig(providers=merged_providers, guardrails=merged_guardrails, threadpool=merged_threadpool)
+    return ServiceConfig(
+        providers=merged_providers,
+        guardrails=merged_guardrails,
+        threadpool=merged_threadpool,
+    )
 
 
 def close_provider_instances(provider_instances: dict[str, Any]) -> None:
@@ -79,7 +83,9 @@ def close_provider_instances(provider_instances: dict[str, Any]) -> None:
                 logging.exception("Failed to close provider %s", provider_name)
 
 
-def build_runtime_instances(config: ServiceConfig) -> tuple[dict[str, Any], dict[str, Any]]:
+def build_runtime_instances(
+    config: ServiceConfig,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     provider_instances: dict[str, Any] = {}
     guardrail_instances: dict[str, Any] = {}
 
@@ -88,7 +94,9 @@ def build_runtime_instances(config: ServiceConfig) -> tuple[dict[str, Any], dict
             provider_instances[provider_name] = provider_config.build()
 
         for guardrail_name, guardrail_config in config.guardrails.items():
-            guardrail_instances[guardrail_name] = guardrail_config.build_guardrail(provider_instances)
+            guardrail_instances[guardrail_name] = guardrail_config.build_guardrail(
+                provider_instances
+            )
     except Exception:
         close_provider_instances(provider_instances)
         raise
@@ -123,12 +131,19 @@ def get_guardrail_instances(request: Request) -> dict[str, Any]:
     return guardrail_instances
 
 
-async def reload_service_state(app: FastAPI, paths: list[Path] | None = None) -> ServiceConfig:
+async def reload_service_state(
+    app: FastAPI, paths: list[Path] | None = None
+) -> ServiceConfig:
     config = load_service_config(paths)
-    provider_instances, guardrail_instances = await run_in_threadpool(build_runtime_instances, config)
+    provider_instances, guardrail_instances = await run_in_threadpool(
+        build_runtime_instances, config
+    )
     logging.info(f"Loaded configuration with providers: {provider_instances}")
     logging.info(f"Loaded configuration with guardrails: {guardrail_instances}")
-    [logging.info(f"Guardrail {name} using provider: {instance.provider}") for name, instance in guardrail_instances.items()]
+    [
+        logging.info(f"Guardrail {name} using provider: {instance.provider}")
+        for name, instance in guardrail_instances.items()
+    ]
     apply_threadpool_settings(config)
 
     reload_lock: Lock | None = getattr(app.state, "reload_lock", None)
@@ -146,7 +161,9 @@ async def reload_service_state(app: FastAPI, paths: list[Path] | None = None) ->
     return config
 
 
-def serialize_result(result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutput[Any, Any, Any]]) -> Any:
+def serialize_result(
+    result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutput[Any, Any, Any]],
+) -> Any:
     def _normalize_numpy_scalars(value: Any) -> Any:
         if isinstance(value, dict):
             return {key: _normalize_numpy_scalars(item) for key, item in value.items()}
@@ -159,7 +176,9 @@ def serialize_result(result: GuardrailOutput[Any, Any, Any] | list[GuardrailOutp
         return value
 
     if isinstance(result, list):
-        return [_normalize_numpy_scalars(item.model_dump(mode="python")) for item in result]
+        return [
+            _normalize_numpy_scalars(item.model_dump(mode="python")) for item in result
+        ]
     return _normalize_numpy_scalars(result.model_dump(mode="python"))
 
 
@@ -171,7 +190,9 @@ async def lifespan(app: FastAPI):
     except (FileNotFoundError, ValidationError, ValueError) as exc:
         raise RuntimeError(str(exc)) from exc
     yield
-    await run_in_threadpool(close_provider_instances, getattr(app.state, "provider_instances", {}))
+    await run_in_threadpool(
+        close_provider_instances, getattr(app.state, "provider_instances", {})
+    )
 
 
 app = FastAPI(title="Any Guardrail Service", version="0.1.0", lifespan=lifespan)
@@ -183,7 +204,9 @@ async def healthcheck() -> dict[str, str]:
 
 
 @app.get("/profiles", response_model=list[GuardrailProfileSummary])
-async def list_profiles(config: ServiceConfig = Depends(get_service_config)) -> list[GuardrailProfileSummary]:
+async def list_profiles(
+    config: ServiceConfig = Depends(get_service_config),
+) -> list[GuardrailProfileSummary]:
     return [
         GuardrailProfileSummary(
             name=name,
@@ -202,11 +225,16 @@ async def validate(
 ) -> ValidateResponse:
     profile = config.guardrails.get(request.profile)
     if profile is None:
-        raise HTTPException(status_code=404, detail=f"Unknown profile: {request.profile}")
+        raise HTTPException(
+            status_code=404, detail=f"Unknown profile: {request.profile}"
+        )
 
     guardrail = guardrail_instances.get(request.profile)
     if guardrail is None:
-        raise HTTPException(status_code=500, detail=f"Guardrail not initialized for profile: {request.profile}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Guardrail not initialized for profile: {request.profile}",
+        )
 
     validate_kwargs = {**profile.validate_kwargs, **request.validate_kwargs}
 
@@ -214,7 +242,9 @@ async def validate(
         if request.input_text is None:
             result = await run_in_threadpool(guardrail.validate, **validate_kwargs)
         else:
-            result = await run_in_threadpool(guardrail.validate, request.input_text, **validate_kwargs)
+            result = await run_in_threadpool(
+                guardrail.validate, request.input_text, **validate_kwargs
+            )
     except TypeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     logging.info(f"Validation result for profile {request.profile}: {result}")

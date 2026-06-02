@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class HuggingFaceProviderConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["huggingface", "HuggingFaceProvider", "HuggingfaceProvider"] = "huggingface"
+    type: Literal["huggingface", "HuggingFaceProvider", "HuggingfaceProvider"] = (
+        "huggingface"
+    )
     tokenizer_id: str | None = None
     trust_remote_code: bool = False
     device: str | None = None
@@ -49,7 +51,9 @@ class EncoderfileProviderConfig(BaseModel):
     def build(self) -> Any:
         try:
             encoderfile_module = import_module("any_guardrail.providers.encoderfile")
-            encoderfile_provider_class = getattr(encoderfile_module, "EncoderfileProvider")
+            encoderfile_provider_class = getattr(
+                encoderfile_module, "EncoderfileProvider"
+            )
         except (ImportError, AttributeError) as exc:
             msg = (
                 "EncoderfileProvider is not available in the installed any-guardrail package. "
@@ -113,7 +117,9 @@ class LlamafileProviderConfig(BaseModel):
         )
 
 
-ProviderConfig = HuggingFaceProviderConfig | EncoderfileProviderConfig | LlamafileProviderConfig
+ProviderConfig = (
+    HuggingFaceProviderConfig | EncoderfileProviderConfig | LlamafileProviderConfig
+)
 
 
 class GuardrailProfileConfig(BaseModel):
@@ -140,7 +146,9 @@ class GuardrailProfileConfig(BaseModel):
         try:
             if provider_instance is None:
                 return AnyGuardrail.create(self.guardrail_name, **create_kwargs)
-            return AnyGuardrail.create(self.guardrail_name, provider=provider_instance, **create_kwargs)
+            return AnyGuardrail.create(
+                self.guardrail_name, provider=provider_instance, **create_kwargs
+            )
         except TypeError as exc:
             msg = f"Invalid guardrail initialization for {self.guardrail_name.value}: {exc}"
             raise ValueError(msg) from exc
