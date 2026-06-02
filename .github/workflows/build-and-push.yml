@@ -39,9 +39,10 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            # On every push to main: tag :latest and the short SHA.
+            # On every push to main: tag :latest
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short,enable={{is_default_branch}}
+            # On _every_ push tag the short SHA.
+            type=sha,format=short
             # On git tag v1.2.3: also tag :1.2.3, :1.2, :1.
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -54,7 +55,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
