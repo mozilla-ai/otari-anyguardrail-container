@@ -1,12 +1,12 @@
 name: package-encoderfiles
 
-# Runs on every push and PR to main. Pushes to Docker Hub only on push-to-main
-# (so PR builds verify the Dockerfile still builds but don't pollute the
-# registry with branch images).
+# Currently retrieves the main version of encoderfiles in
+# the huggingface repo. This should be parameterized somehow 
 on:
   workflow_dispatch:
 env:
   ENCODERFILE_VERSION: v0.6.2
+  ENCODERFILE_BRANCH: main
 
 jobs:
   build-and-push:
@@ -15,10 +15,11 @@ jobs:
     permissions:
       contents: read
     strategy:
+      max-parallel: 1
       matrix:
-        ENCODERFILE_NAME: [{model: "DuoGuard-0.5B", location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve/main/"}, {model: "PIGuard", location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve/main/"}]
+        ENCODERFILE_NAME: [{model: "DuoGuard-0.5B", location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve"}, {model: "PIGuard", location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve"}]
         CPU_ARCH_SPEC: [{spec: "x86_64", img: "linux/amd64"}, {spec: "aarch64", img: "linux/arm64"}]
-        OS_SPEC: ["apple-darwin",  "unknown-linux-gnu"]
+        OS_SPEC: ["unknown-linux-gnu"]
     steps:
       - uses: actions/checkout@v4
 
@@ -28,17 +29,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Retrieve and prepare encoderfile containers
-        id: encoderfile
-        run: |
-          export ENCODERFILE_NAME=${{ matrix.ENCODERFILE_NAME.model }}.${{ matrix.CPU_ARCH_SPEC.spec }}-${{ matrix.OS_SPEC }}
-          curl -L -o $ENCODERFILE_NAME.encoderfile ${{ matrix.ENCODERFILE_NAME.location }}/$ENCODERFILE_NAME.encoderfile?download=true
-          tar xvfz $ENCODERFILE_NAME.encoderfile
-          export IMAGE_NAME=mzdotai/$ENCODERFILE_NAME-encoderfile
-          envsubst < encoderfile.dockerfile.template > encoderfile.dockerfile
-          # for debugging purposes
-          cat encoderfile.dockerfile
-          docker buildx build --file encoderfile.dockerfile --label org.opencontainers.image.version=${{ env.ENCODERFILE_VERSION }} --tag $IMAGE_NAME:${{ env.ENCODERFILE_VERSION }} --platform ${{ matrix.CPU_ARCH_SPEC.img }} --load .
       # Only log in (and push) on push events. PRs from forks can't access
       # secrets anyway; PRs from same-repo branches still skip the push so
       # that "PR open" doesn't publish branch images.
@@ -48,10 +38,47 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build (and push on main / tags)
-        uses: docker/build-push-action@v5
+      - name: Retrieve and prepare encoderfile containers
+        id: encoderfile
+        run: |
+          export ENCODERFILE_NAME=${{ matrix.ENCODERFILE_NAME.model }}.${{ matrix.CPU_ARCH_SPEC.spec }}-${{ matrix.OS_SPEC }}
+          curl -L -o ${ENCODERFILE_NAME}.encoderfile ${{ matrix.ENCODERFILE_NAME.location }}/${{ env.ENCODERFILE_BRANCH }}/${ENCODERFILE_NAME}.encoderfile?download=true
+          export IMAGE_NAME=$(echo mzdotai/${ENCODERFILE_NAME}-encoderfile | tr '[:upper:]' '[:lower:]')
+          envsubst < encoderfile.dockerfile.template > encoderfile.dockerfile
+          # for debugging purposes
+          cat encoderfile.dockerfile
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.encoderfile.outputs.image_name }}
+          tags: |
+            # Keep the configured encoderfile version tag for release compatibility.
+            type=raw,value=${{ env.ENCODERFILE_VERSION }}
+            # On every push to main: tag :latest and the short SHA.
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            # On git tag v1.2.3: also tag :1.2.3, :1.2, :1.
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # PR builds get a :pr-<n> tag for debugging if push were enabled.
+            type=ref,event=pr
+
+      - name: Build and push encoderfile container
+        uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: encoderfile.dockerfile
+          platforms: ${{ matrix.CPU_ARCH_SPEC.img }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.version=${{ env.ENCODERFILE_VERSION }}
+
+
+
+
