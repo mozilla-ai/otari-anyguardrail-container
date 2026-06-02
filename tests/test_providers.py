@@ -18,7 +18,9 @@ class FakeGuardrail:
         return GuardrailOutput(valid=True, explanation="accepted", score=0.9)
 
 
-def _make_config(guardrail_name: str, validate_kwargs: dict[str, Any] | None = None) -> app.ServiceConfig:
+def _make_config(
+    guardrail_name: str, validate_kwargs: dict[str, Any] | None = None
+) -> app.ServiceConfig:
     effective_validate_kwargs = validate_kwargs or {}
     return app.ServiceConfig.model_validate(
         {
@@ -59,7 +61,9 @@ async def _run_interface(
     effective_expected_kwargs = expected_kwargs or {}
 
     app.app.dependency_overrides[app.get_service_config] = lambda: config
-    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {"test-profile": fake_guardrail}
+    app.app.dependency_overrides[app.get_guardrail_instances] = lambda: {
+        "test-profile": fake_guardrail
+    }
 
     async with AsyncClient(
         transport=ASGITransport(app=app.app),
@@ -202,7 +206,9 @@ async def test_off_topic_interface(monkeypatch: pytest.MonkeyPatch) -> None:
     await _run_interface(
         monkeypatch,
         "off_topic",
-        profile_validate_kwargs={"comparison_text": "You are a customer service assistant."},
+        profile_validate_kwargs={
+            "comparison_text": "You are a customer service assistant."
+        },
         request_input_text="tell me a joke",
         expected_args=("tell me a joke",),
         expected_kwargs={"comparison_text": "You are a customer service assistant."},

@@ -13,7 +13,8 @@ dependencies = [
 dev = [
     "httpx>=0.27",
     "pytest>=8",
-    "ty"
+    "ty==0.0.41",
+    "ruff==0.15.15"
 ]
 
 [tool.uv]

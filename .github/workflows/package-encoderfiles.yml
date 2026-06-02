@@ -1,0 +1,57 @@
+name: package-encoderfiles
+
+# Runs on every push and PR to main. Pushes to Docker Hub only on push-to-main
+# (so PR builds verify the Dockerfile still builds but don't pollute the
+# registry with branch images).
+on:
+  workflow_dispatch:
+env:
+  ENCODERFILE_VERSION: v0.6.2
+
+jobs:
+  build-and-push:
+    name: docker build (+ push on main)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        ENCODERFILE_NAME: [{model: "DuoGuard-0.5B", location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve/main/"}, {model: "PIGuard", location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve/main/"}]
+        CPU_ARCH_SPEC: [{spec: "x86_64", img: "linux/amd64"}, {spec: "aarch64", img: "linux/arm64"}]
+        OS_SPEC: ["apple-darwin",  "unknown-linux-gnu"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Retrieve and prepare encoderfile containers
+        id: encoderfile
+        run: |
+          export ENCODERFILE_NAME=${{ matrix.ENCODERFILE_NAME.model }}.${{ matrix.CPU_ARCH_SPEC.spec }}-${{ matrix.OS_SPEC }}
+          curl -L -o $ENCODERFILE_NAME.encoderfile ${{ matrix.ENCODERFILE_NAME.location }}/$ENCODERFILE_NAME.encoderfile?download=true
+          tar xvfz $ENCODERFILE_NAME.encoderfile
+          export IMAGE_NAME=mzdotai/$ENCODERFILE_NAME-encoderfile
+          envsubst < encoderfile.dockerfile.template > encoderfile.dockerfile
+          # for debugging purposes
+          cat encoderfile.dockerfile
+          docker buildx build --file encoderfile.dockerfile --label org.opencontainers.image.version=${{ env.ENCODERFILE_VERSION }} --tag $IMAGE_NAME:${{ env.ENCODERFILE_VERSION }} --platform ${{ matrix.CPU_ARCH_SPEC.img }} --load .
+      # Only log in (and push) on push events. PRs from forks can't access
+      # secrets anyway; PRs from same-repo branches still skip the push so
+      # that "PR open" doesn't publish branch images.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build (and push on main / tags)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
