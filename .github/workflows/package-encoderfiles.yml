@@ -19,7 +19,7 @@ jobs:
       matrix:
         ENCODERFILE_NAME: [{model: "DuoGuard-0.5B", location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve"}, {model: "PIGuard", location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve"}]
         CPU_ARCH_SPEC: [{spec: "x86_64", img: "linux/amd64"}, {spec: "aarch64", img: "linux/arm64"}]
-        OS_SPEC: ["unknown-linux-gnu"]
+        OS_SPEC: ["linux-gnu"]
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +41,7 @@ jobs:
       - name: Retrieve and prepare encoderfile containers
         id: encoderfile
         run: |
+          set +e
           export ENCODERFILE_NAME=${{ matrix.ENCODERFILE_NAME.model }}.${{ matrix.CPU_ARCH_SPEC.spec }}-${{ matrix.OS_SPEC }}
           curl -L -o ${ENCODERFILE_NAME}.encoderfile ${{ matrix.ENCODERFILE_NAME.location }}/${{ env.ENCODERFILE_BRANCH }}/${ENCODERFILE_NAME}.encoderfile?download=true
           export IMAGE_NAME=$(echo mzdotai/${ENCODERFILE_NAME}-encoderfile | tr '[:upper:]' '[:lower:]')
