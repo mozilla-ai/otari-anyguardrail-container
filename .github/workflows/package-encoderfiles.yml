@@ -9,17 +9,34 @@ env:
   ENCODERFILE_BRANCH: main
 
 jobs:
+  setup:
+    name: Checkout code and set encoderfile version matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.setup_matrix.outputs.matrix }}
+    steps:
+      - id: checkout
+        name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: setup_matrix
+        name: Set up encoderfile matrix
+        run: |
+          # Extract the encoderfile matrix config from the manifest and set it as a job output.
+          MATRIX_CONFIG=$(yq -o=json -I=0 '.' encoderfile-manifest.yaml)
+          echo "matrix=${MATRIX_CONFIG}" >> $GITHUB_OUTPUT
+
   build-and-push:
-    name: docker build (+ push on main)
+    needs: setup
+    name: Build and push encoderfile containers
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       max-parallel: 1
-      matrix:
-        ENCODERFILE_NAME: [{model: "DuoGuard-0.5B", location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve"}, {model: "PIGuard", location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve"}]
-        CPU_ARCH_SPEC: [{spec: "x86_64", img: "linux/amd64"}, {spec: "aarch64", img: "linux/arm64"}]
-        OS_SPEC: ["linux-gnu"]
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,8 +59,8 @@ jobs:
         id: encoderfile
         run: |
           set +e
-          export ENCODERFILE_NAME=${{ matrix.ENCODERFILE_NAME.model }}.${{ matrix.CPU_ARCH_SPEC.spec }}-${{ matrix.OS_SPEC }}
-          curl -L -o ${ENCODERFILE_NAME}.encoderfile ${{ matrix.ENCODERFILE_NAME.location }}/${{ env.ENCODERFILE_BRANCH }}/${ENCODERFILE_NAME}.encoderfile?download=true
+          export ENCODERFILE_NAME=${{ matrix.encoderfile.model }}.${{ matrix.cpu_arch_spec.spec }}-${{ matrix.os_spec }}
+          curl -L -o ${ENCODERFILE_NAME}.encoderfile ${{ matrix.encoderfile.location }}/${{ matrix.encoderfile.branch }}/${ENCODERFILE_NAME}.encoderfile?download=true
           export IMAGE_NAME=$(echo mzdotai/${ENCODERFILE_NAME}-encoderfile | tr '[:upper:]' '[:lower:]')
           envsubst < encoderfile.dockerfile.template > encoderfile.dockerfile
           # for debugging purposes
@@ -56,8 +73,6 @@ jobs:
         with:
           images: ${{ steps.encoderfile.outputs.image_name }}
           tags: |
-            # Keep the configured encoderfile version tag for release compatibility.
-            type=raw,value=${{ env.ENCODERFILE_VERSION }}
             # On every push to main: tag :latest and the short SHA.
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
@@ -67,13 +82,15 @@ jobs:
             type=semver,pattern={{major}}
             # PR builds get a :pr-<n> tag for debugging if push were enabled.
             type=ref,event=pr
+            # All branch builds get a :<branch> tag for debugging if push were enabled.
+            type=ref,event=branch
 
       - name: Build and push encoderfile container
         uses: docker/build-push-action@v6
         with:
           context: .
           file: encoderfile.dockerfile
-          platforms: ${{ matrix.CPU_ARCH_SPEC.img }}
+          platforms: ${{ matrix.cpu_arch_spec.img }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: |

@@ -1,0 +1,15 @@
+encoderfile:
+  - model: "DuoGuard-0.5B"
+    location: "https://huggingface.co/mozilla-ai/DuoGuard-DuoGuard-0.5B-encoderfile/resolve"
+    branch: "main"
+    encoderfile_version: v0.6.2
+  - model: "PIGuard"
+    location: "https://huggingface.co/mozilla-ai/leolee99-PIGuard-encoderfile/resolve"
+    branch: "main"
+    encoderfile_version: v0.6.2
+os_spec: ["linux-gnu"]
+cpu_arch_spec:
+  - spec: "x86_64"
+    img: "linux/amd64"
+  - spec: "aarch64"
+    img: "linux/arm64"
