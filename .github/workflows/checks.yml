@@ -28,7 +28,7 @@ jobs:
         run: uv run ty check --output-format github
 
       - name: Run ruff checks
-        run: uv run ruff check
+        run: uv run ruff format --check --output-format github
 
       - name: Run tests
         run: uv run pytest tests
